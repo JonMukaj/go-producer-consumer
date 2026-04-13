@@ -36,7 +36,7 @@ func Migrate(dsn string) error {
 		return fmt.Errorf("migration init: %w", err)
 	}
 
-	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+	if err := m.Migrate(1); err != nil && err != migrate.ErrNoChange {
 		return fmt.Errorf("migration up: %w", err)
 	}
 

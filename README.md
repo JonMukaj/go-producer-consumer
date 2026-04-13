@@ -1,31 +1,6 @@
 # go-producer-consumer
 
-A Go producer/consumer task processing system built for the DevOps interview technical task.
-
-## Tech Choices
-
-| Concern | Choice | Why |
-|---|---|---|
-| **Communication** | gRPC (HTTP/2) | Type-safe via proto, binary protocol, no Swagger needed, built-in streaming path for future use |
-| **Database** | PostgreSQL (Docker) | Native enum support for task state, better concurrent access than SQLite, production-realistic |
-| **Logging** | `log/slog` (stdlib) | Standard library, supports JSON + console handlers, structured key-value logs |
-| **Config** | `github.com/spf13/viper` | Env var override + YAML in one package; defaults embedded via `go:embed` |
-| **Migrations** | `golang-migrate/migrate` | Required by task |
-| **SQL codegen** | `sqlc` | Required by task |
-
-## Goroutines / Channels / Mutexes — Design Rationale
-
-- **Producer**: single `time.Ticker` goroutine — no channel needed because the DB is the backlog buffer. Rate is enforced by the ticker interval.
-- **Consumer**: gRPC server spawns one goroutine per incoming request automatically. The per-type `valueSums` map is protected by a `sync.Mutex` (low contention, simpler than a channel-based accumulator for this use case).
-- **Rate limiter**: `golang.org/x/time/rate` token bucket — uses its own internal mutex; no custom sync required.
-
-## Scalability Bottlenecks
-
-- Single Postgres instance is the primary bottleneck at scale → partitioned tasks table + read replicas for metric queries.
-- gRPC is synchronous per-task send → future: gRPC streaming or a queue (Kafka/RabbitMQ) for true decoupling.
-- Consumer's sleep-based processing is I/O-bound → a goroutine pool with a semaphore pattern would increase throughput.
-
----
+A Go producer/consumer task processing system using gRPC
 
 ## Quick Start
 
@@ -80,12 +55,6 @@ go build -ldflags="-s -w -X main.Version=$(git describe --tags --always)" -o bin
 - `-s` strips the symbol table
 - `-w` strips DWARF debug info
 - `-X main.Version=<ver>` injects the version string at link time
-
-Check all available linker flags:
-```bash
-go tool link   # shows all -ldflags options
-go tool compile -help  # shows all compiler flags
-```
 
 ### Version flag
 
