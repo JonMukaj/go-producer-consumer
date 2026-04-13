@@ -5,8 +5,8 @@ log_format: json
 
 grpc_target: "consumer:50051"
 
-rate_per_second: 5
-max_backlog: 100
+rate_per_second: 15
+max_backlog: 10000
 
 db:
   host: postgres

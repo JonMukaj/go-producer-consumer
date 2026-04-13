@@ -60,6 +60,11 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
+	if err := store.Migrate(cfg.DB.DSN()); err != nil {
+		slog.Error("migration failed", "err", err)
+		os.Exit(1)
+	}
+
 	s, err := store.New(ctx, cfg.DB.DSN())
 	if err != nil {
 		slog.Error("failed to connect to database", "err", err)
@@ -88,24 +93,22 @@ func main() {
 		"target", cfg.GRPCTarget,
 	)
 
+	var produced int64
+
 	for {
 		select {
 		case <-ctx.Done():
 			slog.Info("producer shutting down")
 			return
 		case <-ticker.C:
-			// Backlog check: count tasks in 'received' state.
-			count, err := s.CountByStateValue(ctx, db.TaskStateReceived)
-			if err != nil {
-				slog.Error("backlog check failed", "err", err)
-				continue
-			}
-			if count >= int64(cfg.MaxBacklog) {
-				slog.Warn("backlog limit reached — pausing production",
-					"backlog", count,
+			if produced >= int64(cfg.MaxBacklog) {
+				slog.Warn("backlog limit reached — stopping production",
+					"produced", produced,
 					"max_backlog", cfg.MaxBacklog,
 				)
-				cancel() // stop the service gracefully
+				ticker.Stop()
+				// Keep the process alive so Prometheus can continue scraping metrics.
+				<-ctx.Done()
 				return
 			}
 
@@ -133,6 +136,7 @@ func main() {
 				continue
 			}
 
+			produced++
 			m.TasksProduced.Inc()
 			slog.Debug("task produced", "task_id", row.ID, "type", taskType, "value", taskValue)
 		}

@@ -64,6 +64,11 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
+	if err := store.Migrate(cfg.DB.DSN()); err != nil {
+		slog.Error("migration failed", "err", err)
+		os.Exit(1)
+	}
+
 	s, err := store.New(ctx, cfg.DB.DSN())
 	if err != nil {
 		slog.Error("failed to connect to database", "err", err)

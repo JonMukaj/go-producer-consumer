@@ -5,7 +5,7 @@ log_format: json
 
 grpc_listen: ":50051"
 
-rate_limit: 10
+rate_limit: 5
 rate_burst: 20
 
 db:

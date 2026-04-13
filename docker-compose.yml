@@ -16,16 +16,6 @@ services:
       timeout: 5s
       retries: 10
 
-  migrate:
-    image: migrate/migrate:v4.17.1
-    depends_on:
-      postgres:
-        condition: service_healthy
-    volumes:
-      - ./migrations:/migrations
-    command: ["-path", "/migrations", "-database", "postgres://postgres:postgres@postgres:5432/tasks?sslmode=disable", "up"]
-    restart: on-failure
-
   consumer:
     build:
       context: .
@@ -33,8 +23,8 @@ services:
       args:
         VERSION: ${VERSION:-dev}
     depends_on:
-      migrate:
-        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
     ports:
       - "9091:9091"   # prometheus
       - "6061:6061"   # pprof
@@ -47,7 +37,7 @@ services:
       CONSUMER_DB_NAME: tasks
       CONSUMER_DB_SSLMODE: disable
       CONSUMER_GRPC_LISTEN: ":50051"
-      CONSUMER_RATE_LIMIT: "10"
+      CONSUMER_RATE_LIMIT: "5"
       CONSUMER_RATE_BURST: "20"
       CONSUMER_LOG_LEVEL: info
       CONSUMER_LOG_FORMAT: json
@@ -63,6 +53,8 @@ services:
       args:
         VERSION: ${VERSION:-dev}
     depends_on:
+      postgres:
+        condition: service_healthy
       consumer:
         condition: service_started
     ports:
@@ -76,8 +68,8 @@ services:
       PRODUCER_DB_NAME: tasks
       PRODUCER_DB_SSLMODE: disable
       PRODUCER_GRPC_TARGET: "consumer:50051"
-      PRODUCER_RATE_PER_SECOND: "5"
-      PRODUCER_MAX_BACKLOG: "100"
+      PRODUCER_RATE_PER_SECOND: "15"
+      PRODUCER_MAX_BACKLOG: "10000"
       PRODUCER_LOG_LEVEL: info
       PRODUCER_LOG_FORMAT: json
       PRODUCER_PROMETHEUS_PORT: "9090"
