@@ -1,0 +1,17 @@
+prometheus_port: 9090
+profiling_port: 6060
+log_level: info
+log_format: json
+
+grpc_target: "consumer:50051"
+
+rate_per_second: 5
+max_backlog: 100
+
+db:
+  host: postgres
+  port: 5432
+  user: postgres
+  password: postgres
+  name: tasks
+  sslmode: disable

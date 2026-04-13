@@ -1,0 +1,10 @@
+CREATE TYPE task_state AS ENUM ('received', 'processing', 'done');
+
+CREATE TABLE tasks (
+    id               SERIAL PRIMARY KEY,
+    type             INT         NOT NULL CHECK (type >= 0 AND type <= 9),
+    value            INT         NOT NULL CHECK (value >= 0 AND value <= 99),
+    state            task_state  NOT NULL DEFAULT 'received',
+    creation_time    FLOAT8      NOT NULL,
+    last_update_time FLOAT8      NOT NULL
+);

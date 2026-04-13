@@ -1,0 +1,110 @@
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: tasks
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    image: migrate/migrate:v4.17.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./migrations:/migrations
+    command: ["-path", "/migrations", "-database", "postgres://postgres:postgres@postgres:5432/tasks?sslmode=disable", "up"]
+    restart: on-failure
+
+  consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile.consumer
+      args:
+        VERSION: ${VERSION:-dev}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "9091:9091"   # prometheus
+      - "6061:6061"   # pprof
+      - "50051:50051" # grpc
+    environment:
+      CONSUMER_DB_HOST: postgres
+      CONSUMER_DB_PORT: 5432
+      CONSUMER_DB_USER: postgres
+      CONSUMER_DB_PASSWORD: postgres
+      CONSUMER_DB_NAME: tasks
+      CONSUMER_DB_SSLMODE: disable
+      CONSUMER_GRPC_LISTEN: ":50051"
+      CONSUMER_RATE_LIMIT: "10"
+      CONSUMER_RATE_BURST: "20"
+      CONSUMER_LOG_LEVEL: info
+      CONSUMER_LOG_FORMAT: json
+      CONSUMER_PROMETHEUS_PORT: "9091"
+      CONSUMER_PROFILING_PORT: "6061"
+      GOGC: "100"
+      GOMEMLIMIT: "128MiB"
+
+  producer:
+    build:
+      context: .
+      dockerfile: Dockerfile.producer
+      args:
+        VERSION: ${VERSION:-dev}
+    depends_on:
+      consumer:
+        condition: service_started
+    ports:
+      - "9090:9090"   # prometheus
+      - "6060:6060"   # pprof
+    environment:
+      PRODUCER_DB_HOST: postgres
+      PRODUCER_DB_PORT: 5432
+      PRODUCER_DB_USER: postgres
+      PRODUCER_DB_PASSWORD: postgres
+      PRODUCER_DB_NAME: tasks
+      PRODUCER_DB_SSLMODE: disable
+      PRODUCER_GRPC_TARGET: "consumer:50051"
+      PRODUCER_RATE_PER_SECOND: "5"
+      PRODUCER_MAX_BACKLOG: "100"
+      PRODUCER_LOG_LEVEL: info
+      PRODUCER_LOG_FORMAT: json
+      PRODUCER_PROMETHEUS_PORT: "9090"
+      PRODUCER_PROFILING_PORT: "6060"
+      GOGC: "100"
+      GOMEMLIMIT: "128MiB"
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9092:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+
+volumes:
+  postgres_data:
+  grafana_data:

@@ -1,0 +1,22 @@
+FROM golang:1.26-alpine AS builder
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+ARG VERSION=dev
+RUN go build \
+    -ldflags="-s -w -X main.Version=${VERSION}" \
+    -o /consumer \
+    ./cmd/consumer
+
+FROM scratch
+
+COPY --from=builder /consumer /consumer
+
+EXPOSE 9091 6061 50051
+
+ENTRYPOINT ["/consumer"]
