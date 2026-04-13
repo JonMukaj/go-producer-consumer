@@ -55,10 +55,10 @@ func main() {
 	reg := prometheus.NewRegistry()
 	m := metrics.NewConsumerMetrics(reg)
 
-	go serveHTTP(fmt.Sprintf(":%d", cfg.PrometheusPort), promhttp.HandlerFor(reg, promhttp.HandlerOpts{}), "metrics")
+	go serveHTTP(fmt.Sprintf(":%d", cfg.PrometheusPort), "/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}), "metrics")
 
 	// ── pprof ─────────────────────────────────────────────────────────────
-	go serveHTTP(fmt.Sprintf(":%d", cfg.ProfilingPort), http.DefaultServeMux, "pprof")
+	go serveHTTP(fmt.Sprintf(":%d", cfg.ProfilingPort), "/", http.DefaultServeMux, "pprof")
 
 	// ── DB ────────────────────────────────────────────────────────────────
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -125,7 +125,7 @@ type taskServer struct {
 }
 
 func (s *taskServer) SubmitTask(ctx context.Context, t *taskpb.Task) (*taskpb.TaskResponse, error) {
-	if !s.limiter.Allow() {
+	if err := s.limiter.Wait(ctx); err != nil {
 		return nil, status.Error(codes.ResourceExhausted, "rate limit exceeded")
 	}
 
@@ -198,9 +198,9 @@ func buildLogger(level, format string) *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stdout, opts))
 }
 
-func serveHTTP(addr string, handler http.Handler, name string) {
+func serveHTTP(addr, path string, handler http.Handler, name string) {
 	mux := http.NewServeMux()
-	mux.Handle("/", handler)
+	mux.Handle(path, handler)
 	srv := &http.Server{Addr: addr, Handler: mux}
 	slog.Info("http server listening", "name", name, "addr", addr)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {

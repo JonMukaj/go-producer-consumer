@@ -1,0 +1,14 @@
+# Binaries
+bin/
+
+# Profiling artifacts
+*.prof
+*.pgo
+*.out
+
+# Test coverage
+coverage.out
+coverage.html
+
+# Notes
+my-notes.txt
