@@ -1,6 +1,36 @@
 # go-producer-consumer
 
-A Go producer/consumer task processing system using gRPC
+A Go producer/consumer task-processing system. The **producer** generates tasks at a configurable rate, inserts each one into Postgres (state = `pending`), and then notifies the **consumer** over gRPC. The consumer rate-limits incoming RPCs, processes the task, and advances its state in Postgres (`pending` → `processing` → `done`). Both services share the same Postgres database and expose Prometheus metrics + pprof endpoints, with Grafana dashboards provisioned out of the box. Database migrations are embedded via `golang-migrate` and run on startup.
+
+## Architecture
+
+```text
+            ┌──────────────────────────────┐
+            ▼                              │
+  producer ──gRPC SubmitTask──▶ consumer   │
+     │                              │      │
+     └──── INSERT task ─────▶ Postgres ◀── UPDATE state
+                                 ▲
+     ┌── /metrics ──┐   ┌── /metrics ──┐
+     └──────────────┴─▶ Prometheus ──▶ Grafana
+```
+
+| Service    | Ports (host)                               | Notes                       |
+|------------|--------------------------------------------|-----------------------------|
+| producer   | 9090 (metrics), 6060 (pprof)               | gRPC client                 |
+| consumer   | 50051 (gRPC), 9091 (metrics), 6061 (pprof) | gRPC server                 |
+| postgres   | 5432                                       | `tasks` database            |
+| prometheus | 9092                                       | scrapes producer + consumer |
+| grafana    | 3000                                       | admin / admin (local only)  |
+
+All tunables (rate limits, GC knobs, DB creds, log level) are environment variables — see `docker-compose.yml`.
+
+## Prerequisites
+
+- Go **1.26+** (see [go.mod](go.mod))
+- Docker + Docker Compose v2
+- `make`
+- `migrate` CLI — only for ad-hoc migration runs outside Docker ([install](https://github.com/golang-migrate/migrate/tree/master/cmd/migrate))
 
 ## Quick Start
 
@@ -9,7 +39,7 @@ A Go producer/consumer task processing system using gRPC
 # Migrations run automatically on startup — no separate step needed
 docker compose up --build -d
 
-# Grafana:    http://localhost:3000  (admin / admin)
+# Grafana:    http://localhost:3000  (admin / admin — change before exposing beyond localhost)
 # Prometheus: http://localhost:9092
 ```
 
@@ -86,11 +116,11 @@ ls -lh bin/producer bin/producer-pgo
 # Apply all migrations (runs automatically on startup via golang-migrate embedded in each service)
 make migrate-up
 
-# Add the comment column while services are running
-migrate -path migrations -database "postgres://postgres:postgres@localhost:5432/tasks?sslmode=disable" up
-
-# Remove the comment column while services are running
+# Roll back the most recent migration while services are running
 make migrate-down
+
+# Manual invocation (bypasses make) — useful if the migrate CLI is already on your PATH
+migrate -path migrations -database "postgres://postgres:postgres@localhost:5432/tasks?sslmode=disable" up
 ```
 
 ---

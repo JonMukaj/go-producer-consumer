@@ -47,16 +47,16 @@ func main() {
 	logger := buildLogger(cfg.LogLevel, cfg.LogFormat)
 	slog.SetDefault(logger)
 
-	// ── Prometheus ────────────────────────────────────────────────────────
+	// Prometheus
 	reg := prometheus.NewRegistry()
 	m := metrics.NewProducerMetrics(reg)
 
 	go serveHTTP(fmt.Sprintf(":%d", cfg.PrometheusPort), "/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}), "metrics")
 
-	// ── pprof ─────────────────────────────────────────────────────────────
+	// pprof
 	go serveHTTP(fmt.Sprintf(":%d", cfg.ProfilingPort), "/", http.DefaultServeMux, "pprof")
 
-	// ── DB ────────────────────────────────────────────────────────────────
+	// DB
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
@@ -72,7 +72,7 @@ func main() {
 	}
 	defer s.Close()
 
-	// ── gRPC client ───────────────────────────────────────────────────────
+	// gRPC client
 	conn, err := grpc.NewClient(cfg.GRPCTarget, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		slog.Error("failed to connect to consumer", "target", cfg.GRPCTarget, "err", err)
@@ -81,7 +81,7 @@ func main() {
 	defer conn.Close()
 	client := taskpb.NewTaskServiceClient(conn)
 
-	// ── Produce loop ──────────────────────────────────────────────────────
+	// Produce loop
 	interval := time.Second / time.Duration(cfg.RatePerSecond)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
